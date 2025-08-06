@@ -8,19 +8,43 @@ on:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
-    - name: set up JDK 11
-      uses: actions/setup-java@v4
-      with:
-        java-version: '11'
-        distribution: 'temurin'
-        cache: gradle
+      - uses: actions/checkout@v4
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-    - name: Build with Gradle
-      run: ./gradlew build
+      - name: Set up JDK 11
+        uses: actions/setup-java@v4
+        with:
+          java-version: '11'
+          distribution: 'temurin'
+          cache: gradle
+
+      - name: Install CMake 3.25
+        run: |
+          wget https://github.com/Kitware/CMake/releases/download/v3.25.0/cmake-3.25.0-linux-x86_64.tar.gz
+          tar -xzf cmake-3.25.0-linux-x86_64.tar.gz
+          echo "$GITHUB_WORKSPACE/cmake-3.25.0-linux-x86_64/bin" >> $GITHUB_PATH
+
+      - name: Install Dobby
+        run: |
+          git clone --depth=1 https://github.com/zhongyang219/Dobby.git
+          mkdir -p Dobby/build && cd Dobby/build
+          cmake .. -DCMAKE_INSTALL_PREFIX=$GITHUB_WORKSPACE/dobby_install
+          make -j$(nproc)
+          make install
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x gradlew
+
+      - name: Build native shared libraries (.so)
+        run: ./gradlew assembleDebug
+        env:
+          Dobby_DIR: ${{ github.workspace }}/dobby_install/lib/cmake/Dobby
+          ANDROID_HOME: /usr/local/lib/android/sdk
+
+      - name: Upload compiled .so files
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-libs
+          path: app/build/intermediates/cxx/Debug/**/obj/**/*.so
